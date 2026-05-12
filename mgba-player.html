@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <script src="/coi-serviceworker.js"></script>
+  <link rel="stylesheet" href="/stylesheets/player.css">
+  <link rel="stylesheet" href="/stylesheets/player-override.css">
+
+  <style>
+    #emulator_target,
+    img.preview {
+      image-rendering: pixelated;
+      height: auto;
+      max-height: 100%;
+      width: 100%;
+      aspect-ratio: auto 240 / 160;
+      object-fit: contain;
+      background: inherit;
+    }
+
+    .touch-controls {
+      display: none;
+    }
+
+    .instructions {
+      font-size: 12px;
+      padding: .7em 1em;
+      background: #202124;
+      z-index: 1;
+      position: fixed;
+      width: 100%;
+      border-bottom: 1px solid rgba(0, 0, 0, .1);
+      text-align: center;
+      top: 0;
+    }
+
+    .hidden {
+      display: none;
+      visibility: hidden;
+    }
+
+    #container:hover .menu {
+      opacity: 0.9;
+    }
+  </style>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GBA @ GT</title>
+</head>
+
+<body>
+  <div class="instructions">Click to play...</div>
+  <img class="preview" src="my_project.png" />
+  <div id="container" class="hidden">
+    <div id="menu" class="playing">
+      <ul class="menu" id="menu_top">
+        <li id="play" class="hide">Play</li>
+        <li id="pause" class="show">Pause</li>
+        <li id="restart">Restart</li>
+        <li>Settings
+          <ul>
+            <li><input type="checkbox" id="sound" checked> Sound</li>
+          </ul>
+        </li>
+        <li style="display:none;">
+          Volume
+          <ul>
+            <li>
+              <input type="range" id="volume">
+            </li>
+          </ul>
+        </li>
+        <li id="saves_menu" style="display:none;">
+          Saves
+          <ul id="saves_menu_container">
+            <li><span>Import:</span><input type="file" id="import" class="files"></li>
+            <li id="existing_saves">
+              <span>Existing Saves</span>
+              <ul id="existing_saves_list">
+
+              </ul>
+            </li>
+            <li><a href="./" id="export" target="_new">Export All Saves</a></li>
+          </ul>
+        </li>
+        <li id="fullscreen">Fullscreen</li>
+      </ul>
+    </div>
+    <div id="main">
+      <canvas class="canvas" id="emulator_target" width="240" height="160"></canvas>
+    </div>
+    <!-- <div class="touch-controls">
+      <div class="touch-dpad">
+        <button id="touch-up">↑</button><br>
+        <button id="touch-left">←</button>
+        <button id="touch-right">→</button><br>
+        <button id="touch-down">↓</button>
+      </div>
+      <div class="touch-buttons">
+        <button id="touch-select">SELECT</button>
+        <button id="touch-start">START</button>
+      </div>
+      <div class="touch-buttons">
+        <button id="touch-a">A</button>
+        <button id="touch-b">B</button><br>
+        <button id="touch-l">L</button>
+        <button id="touch-r">R</button>
+      </div>
+    </div> -->
+  </div>
+
+  <!-- user scripts -->
+  <script type="module">
+    import mGBA from '/mgba-wasm/dist/mgba.js';
+
+    let game = "my_project";
+
+    function addEvent(sEvent, oElement, fListener) {
+      oElement.addEventListener(sEvent, fListener, false);
+    }
+
+    async function getFileFromUrl(url, name, defaultType = 'application/octet-stream') {
+      const response = await fetch(url);
+      const data = await response.blob();
+      return new File([data], name, {
+        type: data.type || defaultType,
+      });
+    }
+
+    let module = {
+      canvas: (function () {
+        return document.getElementById('emulator_target');
+      })()
+    };
+
+    window.onload = () => {
+      mGBA(module).then(function (mGBA) {
+        window.mGBA = mGBA;
+        let mGBAVersion = mGBA.version.projectName + ' ' + mGBA.version.projectVersion;
+        console.log(mGBAVersion);
+        mGBA.setCoreSettings({ autoSaveStateEnable: false, restoreAutoSaveStateOnLoad: false });
+
+        function letErRip() {
+          document.querySelector("#container").removeAttribute("class");
+          document.querySelectorAll("img.preview, .instructions").forEach((el => el.remove()));
+          mGBA.loadGame(mGBA.filePaths().gamePath + '/' + game + '.gba')
+        }
+
+        mGBA.FSInit().then(() => {
+          getFileFromUrl(
+            '/' + game + '.gba',
+            game + '.gba'
+          ).then(file => {
+            mGBA.uploadRom(file, () => { addEvent("click", document.querySelector("img.preview"), letErRip); });
+            addEvent("click", document.getElementById("restart"), () => {
+              mGBA.quickReload();
+              mGBA.resumeGame();
+              document.getElementById("play").classList.add("hide");
+              document.getElementById("pause").classList.remove("hide");
+            });
+            addEvent("click", document.getElementById("play"), () => {
+              mGBA.resumeGame();
+              document.getElementById("play").classList.add("hide");
+              document.getElementById("pause").classList.remove("hide");
+            });
+            addEvent("click", document.getElementById("pause"), () => {
+              mGBA.pauseGame();
+              document.getElementById("pause").classList.add("hide");
+              document.getElementById("play").classList.remove("hide");
+            });
+            addEvent("click", document.getElementById("fullscreen"), () => {
+              if (document.fullscreenElement){
+                document.exitFullscreen();
+              } else {
+                document.getElementById("container").requestFullscreen();
+              }
+            });
+            addEvent("change", document.getElementById("sound"), (e) => {
+              e.preventDefault();
+              if (e.target.checked) {
+                mGBA.resumeAudio();
+              } else {
+                mGBA.pauseAudio();
+              }
+            });
+          });
+
+        });
+      });
+    }
+  </script>
+</body>
+
+</html>
